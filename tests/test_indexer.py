@@ -1,5 +1,57 @@
 import pytest
-from scripts.cortex.indexer import compute_hash
+import os
+from scripts.cortex.indexer import compute_hash, get_module_name
+
+def test_get_module_name_empty_settings():
+    """Test getting module name with empty settings"""
+    settings = {}
+
+    # Single file should return "root"
+    assert get_module_name("file.py", settings) == "root"
+
+    # Path with directories should return the first directory part
+    path = os.path.join("src", "main", "app.py")
+    assert get_module_name(path, settings) == "src"
+
+def test_get_module_name_with_match():
+    """Test getting module name when file matches predefined modules"""
+    settings = {
+        "indexing_rules": {
+            "modules": {
+                "core": [f"src{os.sep}core", f"lib{os.sep}core"],
+                "api": [f"src{os.sep}api"]
+            }
+        }
+    }
+
+    # Exact match or directory structure inclusion
+    path1 = os.path.join("src", "core", "file.py")
+    assert get_module_name(path1, settings) == "core"
+
+    # Match at the end
+    path2 = os.path.join("lib", "core")
+    assert get_module_name(path2, settings) == "core"
+
+    # Directory match inside a deeper path
+    path3 = os.path.join("deep", "src", "api", "handler.py")
+    assert get_module_name(path3, settings) == "api"
+
+def test_get_module_name_no_match():
+    """Test getting module name when file does not match any predefined module"""
+    settings = {
+        "indexing_rules": {
+            "modules": {
+                "core": [f"src{os.sep}core"]
+            }
+        }
+    }
+
+    # No match, should fall back to first directory
+    path = os.path.join("src", "utils", "helper.py")
+    assert get_module_name(path, settings) == "src"
+
+    # No match and no directory, should fall back to "root"
+    assert get_module_name("standalone.py", settings) == "root"
 
 def test_compute_hash_deterministic():
     """Test that the same input produces the same hash"""
