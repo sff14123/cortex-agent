@@ -21,13 +21,15 @@ def get_parser_internal(file_path: str):
 
 def get_node_skeleton(node_dict, detail="standard"):
     """
-    단일 노드의 스켈레톤 생성
+    단일 노드의 스켈레톤(시그니처) 문자열을 생성합니다.
+    detail: 'minimal' (이름만), 'standard' (시그니처), 'full' (문서화 포함)
     """
+    name = node_dict.get('name', 'unnamed')
     signature = node_dict.get("signature", "")
     docstring = node_dict.get("raw_body", "").strip().split("\n")[0] if "raw_body" in node_dict else ""
     
     if detail == "minimal":
-        return signature
+        return name
     elif detail == "standard":
         if docstring.startswith('"""') or docstring.startswith("'''") or docstring.startswith("/*") or docstring.startswith("//"):
              return f"{signature}\n    {docstring}"
