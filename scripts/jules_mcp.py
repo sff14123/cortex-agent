@@ -25,6 +25,15 @@ def load_env():
 
 ENV = load_env()
 
+def safe_truncate(text, max_len):
+    if len(text) <= max_len:
+        return text
+    truncated = text[:max_len]
+    last_newline = truncated.rfind('\n')
+    if last_newline > 0:
+        return truncated[:last_newline] + "\n\n...[Diff truncated due to length constraints]..."
+    return truncated + "...[Diff truncated]..."
+
 def jules_review(commit_id, diff_content, instructions):
     api_key = ENV.get("JULES_API_KEY")
     if not api_key:
@@ -37,8 +46,9 @@ def jules_review(commit_id, diff_content, instructions):
     with urllib.request.urlopen(req) as resp:
         sid = json.loads(resp.read().decode())['id']
     
+    safe_diff = safe_truncate(diff_content, 15000)
     msg_url = f"{url}/{sid}:sendMessage"
-    msg_payload = {"prompt": f"{instructions}\n\n--- Diff ---\n{diff_content[:15000]}"}
+    msg_payload = {"prompt": f"{instructions}\n\n--- Diff ---\n{safe_diff}"}
     req = urllib.request.Request(msg_url, data=json.dumps(msg_payload).encode(), headers=headers, method="POST")
     with urllib.request.urlopen(req) as resp:
         return f"Jules AI 리뷰 요청 성공 (Session ID: {sid})"
