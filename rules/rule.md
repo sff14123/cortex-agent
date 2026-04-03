@@ -1,5 +1,5 @@
 ---
-trigger: always_on
+trigger: model_decision
 ---
 
 # 프로젝트 절대 규칙 (Control Tower)

@@ -34,12 +34,17 @@ DEFAULT_IGNORES = [
     "node_modules", "__pycache__", ".git", ".venv", "venv",
     "dist", "build", ".gradle", ".idea", ".vscode", ".vexp",
     ".cortex", "target", ".next", "*.min.js", "*.min.css",
-    ".agents", "*.pyc", "*.class", "skills", "skills/**",
+    "*.pyc", "*.class", "skills", "skills/**",
 ]
 
 # ==============================================================================
 # 파일 필터링 및 유틸리티
 # ==============================================================================
+
+def strip_frontmatter(content: str) -> str:
+    """YAML Frontmatter (--- ... ---) 제거"""
+    import re
+    return re.sub(r"^---\s*\n.*?\n---\s*\n", "", content, flags=re.DOTALL)
 
 def load_gitignore(workspace: str) -> list:
     """프로젝트의 .gitignore 패턴 로드"""
@@ -116,7 +121,6 @@ def get_module_name(rel_path: str, settings: dict) -> str:
     modules = settings.get("indexing_rules", {}).get("modules", {})
     for mod_name, mod_paths in modules.items():
         for m_path in mod_paths:
-            # 상위 폴더에 관계없이 폴더 구조가 포함되어 있으면 매칭
             if f"{m_path}{os.sep}" in f"{rel_path}{os.sep}" or rel_path.endswith(m_path):
                 return mod_name
     parts = rel_path.split(os.sep)
@@ -136,6 +140,7 @@ def scan_files(workspace: str) -> list:
     ignore_patterns = load_gitignore(workspace)
     files = []
     
+    # 1. 기본 소스 코드 스캔
     for root, dirs, filenames in os.walk(workspace):
         dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns, workspace)]
         for fname in filenames:
@@ -145,7 +150,18 @@ def scan_files(workspace: str) -> list:
                 if not should_ignore(full_path, ignore_patterns, workspace):
                     if should_include(full_path, workspace, settings):
                         files.append(os.path.relpath(full_path, workspace))
-    return sorted(files)
+                        
+    # 2. .agents 내부 규칙 및 프로토콜 강제 포함
+    agent_docs = [".agents/rules", ".agents/protocols"]
+    for doc_dir in agent_docs:
+        abs_doc_dir = os.path.join(workspace, doc_dir)
+        if os.path.exists(abs_doc_dir):
+            for root, _, filenames in os.walk(abs_doc_dir):
+                for fname in filenames:
+                    if fname.endswith(".md"):
+                        files.append(os.path.relpath(os.path.join(root, fname), workspace))
+                        
+    return sorted(list(set(files)))
 
 
 def index_workspace(workspace: str, force: bool = False) -> dict:
@@ -189,6 +205,11 @@ def index_workspace(workspace: str, force: bool = False) -> dict:
             stats["errors"] += 1
             continue
             
+        # .agents 내부 파일인 경우 본문 정제 (Trigger 등 메타데이터 제거)
+        clean_source = source
+        if rel_path.startswith(".agents/rules") or rel_path.startswith(".agents/protocols"):
+            clean_source = strip_frontmatter(source)
+            
         # 기존 데이터 삭제
         old_nodes = conn.execute("SELECT id FROM nodes WHERE file_path = ?", (rel_path,)).fetchall()
         old_ids = [r[0] for r in old_nodes]
@@ -203,7 +224,13 @@ def index_workspace(workspace: str, force: bool = False) -> dict:
             
         # 노드/벡터 저장
         nodes_data = []
-        cat = "SKILL" if "skills/" in rel_path or "skills\\" in rel_path else "SOURCE"
+        if "skills/" in rel_path or "skills\\" in rel_path:
+            cat = "SKILL"
+        elif rel_path.startswith(".agents/"):
+            cat = "RULE"
+        else:
+            cat = "SOURCE"
+            
         for node in result["nodes"]:
             nodes_data.append((
                 node["id"], node["type"], node["name"], node["fqn"],
@@ -218,7 +245,10 @@ def index_workspace(workspace: str, force: bool = False) -> dict:
             vec_text = f"{node['type']} {node['fqn']}\n"
             if node.get('signature'): vec_text += f"Sig: {node['signature']}\n"
             if node.get('docstring'): vec_text += f"Doc: {node['docstring']}\n"
-            vec_text += node['raw_body'][:1000]
+            
+            # RULE 카테고리의 경우 정제된 본문 사용
+            node_body = clean_source if cat == "RULE" else node['raw_body']
+            vec_text += node_body[:1200]
             
             vector_items.append({
                 "id": node["id"], "text": vec_text,
@@ -265,7 +295,6 @@ def _resolve_edges(conn):
             try:
                 conn.execute("UPDATE edges SET target_id = ? WHERE rowid = ?", (match[0], row_id))
             except sqlite3.IntegrityError:
-                # 중복된 관계가 이미 존재하는 경우, 현재의 미해결 관계 행을 삭제하여 중복 방지
                 conn.execute("DELETE FROM edges WHERE rowid = ?", (row_id,))
         else:
             conn.execute("DELETE FROM edges WHERE rowid = ?", (row_id,))
