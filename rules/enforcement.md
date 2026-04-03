@@ -1,5 +1,5 @@
 ---
-trigger: glob
+trigger: model_decision
 globs: **/*.{java,py,js,jsx,ts,tsx,html,css,json,md,yml,yaml,xml,sql,sh,gradle,properties}
 
 ---
