@@ -318,12 +318,8 @@ class SkillManager:
             col_names = [d[0] for d in conn.execute("SELECT * FROM memories LIMIT 1").description]
             fts_scored, fts_data = {}, {}
             for r, row in enumerate(fts_rows):
-<<<<<<< Updated upstream
                 # sqlite3.Row는 dict()로 직접 변환 가능하며, 이게 zip보다 훨씬 안전함
-                d = dict(row)
-=======
                 d = dict(zip(col_names, row)) if isinstance(row, tuple) else dict(row)
->>>>>>> Stashed changes
                 fts_scored[d["key"]] = 1.0 / (r + 60)  # RRF 점수
                 fts_data[d["key"]] = d
 
@@ -352,11 +348,7 @@ class SkillManager:
                         query_sql = f"SELECT * FROM memories WHERE key IN ({placeholders})"
                         db_rows = conn.execute(query_sql, chunk).fetchall()
                         for db_row in db_rows:
-<<<<<<< Updated upstream
-                            d = dict(db_row)
-=======
                             d = dict(zip(col_names, db_row)) if isinstance(db_row, tuple) else dict(db_row)
->>>>>>> Stashed changes
                             fts_data[d["key"]] = d
             except Exception as ve_err:
                 import sys

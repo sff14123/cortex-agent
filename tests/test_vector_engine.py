@@ -110,9 +110,8 @@ def test_old_metadata_warning(tmp_path, capsys):
         index, meta = vector_engine._load_faiss_index(workspace)
 
         captured = capsys.readouterr()
-        assert "WARNING: Old metadata format found" in captured.err
-        assert "Please re-index" in captured.err
+        assert "Migrating" in captured.err
+        assert "Migration complete." in captured.err
 
-        # Should return None, [] because JSON file is missing
-        assert index is None
-        assert meta == []
+        # Should return the mock index and migrated meta because the app auto-migrates now
+        assert meta == [{"old": "data"}]
